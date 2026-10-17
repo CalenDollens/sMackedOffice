@@ -662,7 +662,7 @@ GenOffice would not be possible without these open-source projects:
   (MIT) — the icon set across the ribbons.
 - [electron-updater](https://www.electron.build/) (MIT) — in-app updates.
 - Liberation, Carlito, Caladea, and Noto CJK fonts (OFL/Apache-2.0) — bundled
-  document fonts.
+  document fonts..
 
 `npm run notices` regenerates the bundled third-party license summary
 (`tools/gen-third-party-notices.mjs`); all runtime dependencies are
