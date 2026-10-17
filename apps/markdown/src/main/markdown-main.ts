@@ -1,3 +1,5 @@
+/// <reference types="electron-vite/node" />
+import appIcon from '../../../../packages/ui/src/assets/smackedoffice-logo.png?asset'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, resolve } from 'node:path'
@@ -1143,6 +1145,7 @@ export async function exportMarkdownPdfHeadless(
 ): Promise<void> {
   registerMarkdownIpc()
   const win = new BrowserWindow({
+    icon: appIcon,
     show: false,
     width: 1200,
     height: 850,
@@ -1208,6 +1211,7 @@ export function startMarkdownStandalone(): void {
     installRendererProtocol({ markdown: join(__dirname, '../renderer') })
     registerMarkdownIpc()
     const win = new BrowserWindow({
+      icon: appIcon,
       width: 1200,
       height: 850,
       webPreferences: {

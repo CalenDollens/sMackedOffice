@@ -96,7 +96,11 @@ export class McpServerService {
   // ── tool registration ─────────────────────────────────────────────────────
 
   private createSessionServer(): McpServer {
-    const server = new McpServer({ name: 'GenOffice', version: this.version })
+    const server = new McpServer({
+      name: 'GenOffice',
+      title: 'sMackedOffice',
+      version: this.version,
+    })
     // a factory gives each connected client its own tool instances (session
     // state lives in their closures); otherwise the fixed set is shared
     const tools = this.toolsFactory ? this.toolsFactory() : this.tools

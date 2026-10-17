@@ -20,7 +20,7 @@ import { appLaunch } from '../resources'
 export const capabilitiesCommand: CommandDef = {
   name: 'capabilities',
   summary:
-    'Report which cloud features (search, image search, image generation, media analysis) are configured in GenOffice, and whether the app is installed.',
+    'Report which cloud features (search, image search, image generation, media analysis) are configured in sMackedOffice, and whether the app is installed.',
   usage: 'capabilities',
   async run(_args, ctx) {
     await prepareCloud(ctx.env)

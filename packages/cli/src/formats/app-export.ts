@@ -39,8 +39,8 @@ export async function exportViaApp(
   const env = opts.env ?? process.env
   const launch = appLaunch(env)
   if (!launch) {
-    throw new CliError(EXIT.app, 'GenOffice app not found (needed for this conversion)', {
-      hint: 'install GenOffice, or set GENOFFICE_APP_BIN to its executable',
+    throw new CliError(EXIT.app, 'sMackedOffice app not found (needed for this conversion)', {
+      hint: 'install sMackedOffice, or set GENOFFICE_APP_BIN to its executable',
     })
   }
   const args = [
@@ -55,7 +55,7 @@ export async function exportViaApp(
   ]
   const childEnv = { ...env }
   delete childEnv.ELECTRON_RUN_AS_NODE
-  opts.log?.(`starting GenOffice for ${target} export`)
+  opts.log?.(`starting sMackedOffice for ${target} export`)
   const spawn = opts.spawn ?? nodeSpawn
   const child = spawn(launch.command, args, { env: childEnv, stdio: ['ignore', 'pipe', 'pipe'] })
   const { code, signal, stdout, stderr, timedOut } = await waitFor(
@@ -68,15 +68,15 @@ export async function exportViaApp(
   // export owns is done; a crash or kill during Electron's own quit must not
   // turn a finished export into a failure.
   if (envelope?.status === 'ok' && existsSync(outputPath)) {
-    if (timedOut) opts.log?.('export finished but GenOffice had to be terminated on quit')
+    if (timedOut) opts.log?.('export finished but sMackedOffice had to be terminated on quit')
     else if (code !== 0)
-      opts.log?.(`export finished but GenOffice ${describeExit(code, signal)} while quitting`)
+      opts.log?.(`export finished but sMackedOffice ${describeExit(code, signal)} while quitting`)
     return { outputPath, summary: envelope.summary ?? `exported to ${outputPath}` }
   }
   if (timedOut) {
     throw new CliError(
       EXIT.conversion,
-      `GenOffice did not finish the export within ${Math.round((opts.timeoutMs ?? DEFAULT_TIMEOUT_MS) / 1000)}s`,
+      `sMackedOffice did not finish the export within ${Math.round((opts.timeoutMs ?? DEFAULT_TIMEOUT_MS) / 1000)}s`,
       {
         app: launch.command,
       },
@@ -86,7 +86,7 @@ export async function exportViaApp(
   if (!envelope && (signal || code === null)) {
     throw new CliError(
       EXIT.app,
-      `GenOffice ${describeExit(code, signal)} while exporting ${input}${tail ? `: ${tail}` : ''}`,
+      `sMackedOffice ${describeExit(code, signal)} while exporting ${input}${tail ? `: ${tail}` : ''}`,
       { app: launch.command, exit_code: code, signal },
       {
         reason: 'app_crashed',
@@ -100,8 +100,8 @@ export async function exportViaApp(
     envelope?.summary ??
     (tail ||
       (code === 0
-        ? 'GenOffice exited without writing the file; this GenOffice version may not support --headless-export'
-        : `GenOffice exited with code ${code}`))
+        ? 'sMackedOffice exited without writing the file; this sMackedOffice version may not support --headless-export'
+        : `sMackedOffice exited with code ${code}`))
   throw new CliError(exitCodeFor(code), message, {
     app: launch.command,
     exit_code: code,

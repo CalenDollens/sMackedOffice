@@ -112,7 +112,7 @@ describe('exportViaApp', () => {
     ).rejects.toBeInstanceOf(CliError)
   })
 
-  it('keeps a finished export when GenOffice crashes while quitting', async () => {
+  it('keeps a finished export when sMackedOffice crashes while quitting', async () => {
     const dir = tempDir()
     const out = join(dir, 'crash-ok.pdf')
     const logs: string[] = []
@@ -138,11 +138,11 @@ describe('exportViaApp', () => {
     ).rejects.toMatchObject({
       code: 4,
       reason: 'app_crashed',
-      message: 'GenOffice crashed (SIGSEGV) while exporting /tmp/a.docx: boom',
+      message: 'sMackedOffice crashed (SIGSEGV) while exporting /tmp/a.docx: boom',
     })
   })
 
-  it('keeps the error envelope when GenOffice crashes after reporting a failure', async () => {
+  it('keeps the error envelope when sMackedOffice crashes after reporting a failure', async () => {
     const dir = tempDir()
     await expect(
       exportViaApp('/tmp/a.docx', 'pdf', join(dir, 'err.pdf'), {

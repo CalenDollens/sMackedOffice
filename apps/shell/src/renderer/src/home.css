@@ -14,9 +14,6 @@
   --timeline-user-text: #5a6170;
   /* lift for the active segment in gray-track tab pills */
   --shadow-pill: 0 1px 2px rgb(0 0 0 / 8%);
-
-  /* genoffice-logo.svg is pure black-and-white; dark themes flip it to 1 */
-  --logo-invert: 0;
 }
 
 /* ── Dark mode overrides ─────────────────────────────────── */
@@ -32,7 +29,6 @@
   --timeline-user-bg: #2a2a3a;
   --timeline-user-text: #b0b0c0;
   --shadow-pill: 0 1px 2px rgb(0 0 0 / 40%);
-  --logo-invert: 1;
 }
 
 /* System dark: no data-theme or data-theme="system" — follow OS preference */
@@ -47,7 +43,6 @@
     --timeline-user-bg: #2a2a3a;
     --timeline-user-text: #b0b0c0;
     --shadow-pill: 0 1px 2px rgb(0 0 0 / 40%);
-    --logo-invert: 1;
   }
 }
 
@@ -120,7 +115,16 @@ body.vib .home {
   display: block;
   height: 28px;
   width: auto;
-  filter: invert(var(--logo-invert));
+  max-width: 100%;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.brand-name {
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .sidebar-nav {
@@ -1953,6 +1957,10 @@ body.vib .home {
 @media (max-width: 900px) {
   .sidebar {
     width: 200px;
+  }
+
+  .brand-name {
+    font-size: 16px;
   }
 
   .content {

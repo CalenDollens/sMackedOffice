@@ -67,7 +67,7 @@ const MAX_NATIVE_SESSIONS = 64
 const MAX_MODEL_PAGES = 10
 const CODEX_TEMP_PREFIX = 'genoffice-codex-app-server-'
 const CODEX_BASE_INSTRUCTIONS =
-  'You are the language-model backend embedded in GenOffice. Never inspect or modify local files, run shell commands, browse, call MCP, use apps, or invoke any built-in Codex tool. The caller supplies the complete relevant conversation and a JSON Schema. Return exactly one assistant response matching that schema; GenOffice itself executes document tools.'
+  'You are the language-model backend embedded in sMackedOffice. Never inspect or modify local files, run shell commands, browse, call MCP, use apps, or invoke any built-in Codex tool. The caller supplies the complete relevant conversation and a JSON Schema. Return exactly one assistant response matching that schema; sMackedOffice itself executes document tools.'
 
 /** Max buffered stdout line: a child that writes megabytes without a newline would grow the RPC
  *  buffer until the process dies. The SSE reader and this bridge's stderr reader are both capped;
@@ -512,7 +512,7 @@ class CodexAppServerClient {
 
   private async initialize(): Promise<void> {
     await this.requestWire('initialize', {
-      clientInfo: { name: 'genoffice', title: 'GenOffice', version: '0.1.0' },
+      clientInfo: { name: 'genoffice', title: 'sMackedOffice', version: '0.1.0' },
       capabilities: { experimentalApi: false, requestAttestation: false },
     })
     this.notify('initialized')
@@ -729,9 +729,9 @@ export function buildCodexAppServerPrompt(
     })),
   }
   return [
-    'Treat the payload below as the new GenOffice conversation events for this turn and follow its system instruction.',
-    'Do not use Codex tools. GenOffice will execute only the tool calls returned in the required response schema.',
-    'Put user-visible prose in text. Put requested GenOffice tool calls in toolCalls; inputJson must be a JSON-encoded object matching the listed inputSchema. Use only listed tool names. If no tool is needed, return an empty toolCalls array.',
+    'Treat the payload below as the new sMackedOffice conversation events for this turn and follow its system instruction.',
+    'Do not use Codex tools. sMackedOffice will execute only the tool calls returned in the required response schema.',
+    'Put user-visible prose in text. Put requested sMackedOffice tool calls in toolCalls; inputJson must be a JSON-encoded object matching the listed inputSchema. Use only listed tool names. If no tool is needed, return an empty toolCalls array.',
     `Keep this one-turn response within roughly ${maxTokens} output tokens.`,
     '<genoffice_payload>',
     JSON.stringify(payload),

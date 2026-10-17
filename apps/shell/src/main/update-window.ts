@@ -1,3 +1,5 @@
+/// <reference types="electron-vite/node" />
+import appIcon from '../../../../packages/ui/src/assets/smackedoffice-logo.png?asset'
 import { join } from 'node:path'
 import { BrowserWindow, ipcMain } from 'electron'
 import type { UpdateUiState } from '../shared/update-api'
@@ -51,6 +53,7 @@ export function showUpdateWindow(
   }
 
   const win = new BrowserWindow({
+    icon: appIcon,
     width: 400,
     height: 430,
     ...(parent && !parent.isDestroyed() ? { parent, modal: true } : {}),

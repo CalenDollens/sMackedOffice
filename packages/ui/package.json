@@ -19,6 +19,7 @@
     "./ai-scope-quote.css": "./src/ai-scope-quote.css",
     "./image-dialogs.css": "./src/image-dialogs.css",
     "./image-viewer.css": "./src/image-viewer.css",
+    "./branding/*": "./src/assets/*",
     "./fonts/*": "./src/fonts/*"
   },
   "scripts": {

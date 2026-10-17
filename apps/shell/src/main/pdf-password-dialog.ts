@@ -1,3 +1,5 @@
+/// <reference types="electron-vite/node" />
+import appIcon from '../../../../packages/ui/src/assets/smackedoffice-logo.png?asset'
 import { join } from 'node:path'
 import { BrowserWindow, ipcMain } from 'electron'
 import type { PdfPasswordUiState } from '../shared/pdf-password-api'
@@ -70,6 +72,7 @@ export function promptPdfPassword(
   }
 
   const win = new BrowserWindow({
+    icon: appIcon,
     width: 440,
     height: 312,
     ...(parent && !parent.isDestroyed() ? { parent, modal: true } : {}),

@@ -1,3 +1,5 @@
+/// <reference types="electron-vite/node" />
+import appIcon from '../../../../packages/ui/src/assets/smackedoffice-logo.png?asset'
 /**
  * GenOffice Slides main process — pptx parsing/render-tree building/edit application/saving all live
  * here (Node side). The renderer only gets plain-data RenderSlide; edit intents are sent back
@@ -4550,6 +4552,7 @@ export function registerSlidesIpc(): void {
       // PRINT_READY_SCRIPT settle wait (same as the headless export window)
       createWindow: () =>
         new BrowserWindow({
+          icon: appIcon,
           show: false,
           webPreferences: { sandbox: true, backgroundThrottling: false },
         }),
@@ -4571,6 +4574,7 @@ export function registerSlidesIpc(): void {
       })
       const owner = hostWindowFor(e.sender) ?? dialogParent()
       const win = new BrowserWindow({
+        icon: appIcon,
         show: false,
         ...(owner && !owner.isDestroyed() ? { parent: owner } : {}),
         ...(process.platform === 'win32'
@@ -4783,6 +4787,7 @@ export async function exportSlidesPdfHeadless(
 ): Promise<void> {
   registerSlidesIpc()
   const win = new BrowserWindow({
+    icon: appIcon,
     show: false,
     width: 1280,
     height: 840,
@@ -4823,9 +4828,10 @@ export async function exportSlidesPdfHeadless(
 
 export function createSlidesWindow(openPath?: string | null): BrowserWindow {
   const win = new BrowserWindow({
+    icon: appIcon,
     width: 1280,
     height: 840,
-    title: 'GenOffice Slides',
+    title: 'sMackedOffice Slides',
     ...(process.platform === 'darwin'
       ? { titleBarStyle: 'hiddenInset' as const }
       : {
@@ -5061,6 +5067,10 @@ async function applyMainProcessProxy(): Promise<void> {
 }
 
 export function startSlidesStandalone(): void {
+  // Keep existing profiles when the packaged product name changes.
+  if (app.isPackaged) {
+    app.setPath('userData', join(app.getPath('appData'), 'GenOffice Slides'))
+  }
   registerRendererScheme()
   installNavigationGuard(app)
   installContextMenu(app, () => contextMenuLabels(getUiLang()))

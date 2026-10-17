@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import appIcon from './assets/app-icon.png'
+import appIcon from '@genoffice/ui/branding/smackedoffice-logo.png'
 import { useI18n } from './locale'
 import type { StringKey } from './locale'
 import './onboarding.css'
@@ -51,7 +51,7 @@ function renderEmphasis(text: string) {
  * 60px canvas, 4px strokes — same visual mass as the 60px app icon */
 function SlideArt({ kind }: { kind: Slide['art'] }) {
   if (kind === 'logo') {
-    return <img className="onb-art onb-art-logo" src={appIcon} alt="" />
+    return <img className="onb-art onb-art-logo" src={appIcon} alt="sMackedOffice" />
   }
   if (kind === 'gift') {
     // hand-drawn gift kept over the spec vector deliberately; 48 canvas at

@@ -101,7 +101,7 @@
 .onb-art-logo {
   width: 60px;
   height: 60px;
-  border-radius: 13.5px;
+  object-fit: contain;
 }
 
 /* decorative glyphs: exact design-spec vectors — 60px box, 4px strokes, bare

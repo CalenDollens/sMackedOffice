@@ -1,3 +1,5 @@
+/// <reference types="electron-vite/node" />
+import appIcon from '../../../../packages/ui/src/assets/smackedoffice-logo.png?asset'
 import {
   existsSync,
   mkdirSync,
@@ -960,6 +962,7 @@ async function renderPrintPdf(
   const htmlPath = join(workDir, 'print.html')
   await writeFile(htmlPath, buildPreviewDocument(html, base), 'utf8')
   const printWin = new BrowserWindow({
+    icon: appIcon,
     show: false,
     webPreferences: { sandbox: true, javascript: false },
   })
@@ -1356,6 +1359,7 @@ function registerHtmlIpc(): void {
     const bounds =
       parent && !parent.isDestroyed() ? parent.getContentBounds() : { width: 1200, height: 850 }
     const win = new BrowserWindow({
+      icon: appIcon,
       width: bounds.width,
       height: bounds.height,
       webPreferences: {
@@ -1896,6 +1900,7 @@ export async function exportHtmlHeadless(
 ): Promise<void> {
   registerHtmlIpc()
   const win = new BrowserWindow({
+    icon: appIcon,
     show: false,
     width: 1200,
     height: 850,
@@ -1961,6 +1966,7 @@ export function startHtmlStandalone(): void {
     installRendererProtocol({ html: join(__dirname, '../renderer') })
     registerHtmlIpc()
     const win = new BrowserWindow({
+      icon: appIcon,
       width: 1200,
       height: 850,
       webPreferences: {

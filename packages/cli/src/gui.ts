@@ -70,12 +70,12 @@ export function assertNotOpenInGui(abs: string, env: NodeJS.ProcessEnv): void {
     if (!open.paths.some((p) => realizedPath(p) === target)) continue
     throw new CliError(
       EXIT.file,
-      `GenOffice has this file open: ${abs}`,
+      `sMackedOffice has this file open: ${abs}`,
       { gui_pid: open.pid },
       {
         reason: 'file_open_in_gui',
         suggestion:
-          'close the tab in GenOffice first, or pass --force to write anyway (the editor may overwrite your change on its next save)',
+          'close the tab in sMackedOffice first, or pass --force to write anyway (the editor may overwrite your change on its next save)',
       },
     )
   }

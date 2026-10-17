@@ -1,3 +1,5 @@
+/// <reference types="electron-vite/node" />
+import appIcon from '../../../../packages/ui/src/assets/smackedoffice-logo.png?asset'
 import { createHash, randomUUID } from 'node:crypto'
 import {
   createReadStream,
@@ -1581,7 +1583,7 @@ async function createStandaloneSheetsDocument(
   request: SheetsAiHostDocumentRequest,
 ): Promise<WorkbookCreateDocumentResult> {
   if (request.type === 'docx') {
-    return { ok: false, error: 'Creating DOCX files requires the GenOffice shell or Docs app.' }
+    return { ok: false, error: 'Creating DOCX files requires the sMackedOffice shell or Docs app.' }
   }
   const title = sanitizeGeneratedFileBase(request.title)
   try {
@@ -2123,12 +2125,13 @@ export async function createSheetsWindow(
   sidecar = client
   client.start()
   const window = new BrowserWindow({
+    icon: appIcon,
     width: 1440,
     height: 900,
     minWidth: 720,
     minHeight: 550,
     show: false,
-    title: 'GenOffice Sheets',
+    title: 'sMackedOffice Sheets',
     // Traffic lights sit inside the toolbar row.
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     webPreferences: {
@@ -2205,6 +2208,7 @@ export async function exportSheetsPdfHeadless(
   sidecar = client
   client.start()
   const win = new BrowserWindow({
+    icon: appIcon,
     show: false,
     width: 1440,
     height: 900,

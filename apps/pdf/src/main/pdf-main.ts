@@ -1,3 +1,5 @@
+/// <reference types="electron-vite/node" />
+import appIcon from '../../../../packages/ui/src/assets/smackedoffice-logo.png?asset'
 import {
   constants,
   copyFileSync,
@@ -571,7 +573,7 @@ async function createStandaloneDocument(
   if (request.type === 'docx') {
     return {
       ok: false,
-      error: 'Creating DOCX files requires the GenOffice shell or Docs app.',
+      error: 'Creating DOCX files requires the sMackedOffice shell or Docs app.',
     }
   }
   const title = sanitizeGeneratedDocumentTitle(request.title)
@@ -1686,6 +1688,7 @@ export function startPdfStandalone(): void {
     installRendererProtocol({ pdf: join(__dirname, '../renderer') })
     registerPdfIpc()
     const win = new BrowserWindow({
+      icon: appIcon,
       width: 1200,
       height: 850,
       webPreferences: {

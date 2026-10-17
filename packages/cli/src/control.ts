@@ -77,9 +77,9 @@ export function controlRequest(
     const unavailable = (why: string) =>
       settle(() =>
         reject(
-          new CliError(EXIT.app, `GenOffice did not answer: ${why}`, undefined, {
+          new CliError(EXIT.app, `sMackedOffice did not answer: ${why}`, undefined, {
             reason: 'app_unavailable',
-            suggestion: 'start GenOffice (or `genoffice open <file>`) and retry',
+            suggestion: 'start sMackedOffice (or `genoffice open <file>`) and retry',
           }),
         ),
       )

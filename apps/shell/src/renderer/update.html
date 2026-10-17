@@ -2,12 +2,18 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="../../../../packages/ui/src/assets/favicon.png"
+    />
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws://localhost:*"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GenOffice Update</title>
+    <title>sMackedOffice Update</title>
     <style>
       :root {
         --accent: #2367ec;
@@ -64,8 +70,7 @@
       #hero img {
         width: 64px;
         height: 64px;
-        border-radius: 14px;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+        object-fit: contain;
       }
       #headline {
         color: #fff;
@@ -170,7 +175,7 @@
   <body>
     <div id="card">
       <div id="hero">
-        <img src="./src/assets/app-icon.png" alt="GenOffice" />
+        <img src="../../../../packages/ui/src/assets/smackedoffice-logo.png" alt="sMackedOffice" />
         <div id="headline"></div>
         <div id="versions">
           <span class="chip" id="ver-current"></span>
