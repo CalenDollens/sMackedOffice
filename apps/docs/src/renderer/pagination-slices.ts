@@ -1547,8 +1547,9 @@ export function planRowSplit(
 /** the shortest fragment a row can leave on a page (row-relative px): with cells
  *  (and a cell split path), the lowest cell cut that is legal under the widow rule
  *  (two lines of an opening paragraph, or that paragraph whole when it is shorter
- *  than four lines); else the first cut point; an unsplittable row demands its
- *  full height, a declared-height row at least its page-capped minimum */
+ *  than four lines); else the first cut point; an unsplittable row that fits a
+ *  page demands its full height, a declared-height row at least its page-capped
+ *  minimum. A row taller than a page must remain splittable. */
 function firstLegalCut(
   row: TableRowBox,
   widow: boolean,
@@ -1556,7 +1557,7 @@ function firstLegalCut(
   cellSplit: boolean,
 ): number {
   const minH = Math.min(row.minHPx ?? 0, contentH)
-  if (row.cantSplit) return row.height
+  if (row.cantSplit && row.height <= contentH + 0.01) return row.height
   if (!row.cells?.length || !cellSplit) return Math.max(row.cutYs?.[0] ?? row.height, minH)
   let cut = 0
   for (const c of row.cells) {
@@ -1706,9 +1707,8 @@ function _placeTable(
       // place segment by segment at the cut points. If the first segment doesn't fit,
       // turn the page first (equivalent to pushing the whole row)
       // Word probe (2026-08-13): a plain first row has no special rule — it splits
-      // like any row. Only tblHeader/cantSplit rows push whole. Over-page header/
-      // cantSplit rows Word overflow-clips instead; we split them (DOM clipping is
-      // costly) — a deliberate deviation.
+      // like any row. Only page-sized tblHeader/cantSplit rows push whole. A row
+      // taller than the page must split so its content remains reachable.
       // Declared atLeast height is reserved space, not breakable content: when
       // the declared minimum overflows the page remainder, Word starts the row
       // on a fresh page instead of splitting into the remainder (near-empty
@@ -1722,8 +1722,10 @@ function _placeTable(
         }
         turnedForMinH = true
       }
-      const keepWhole = row.isHeader && ri < leadHeaderRows && row.height <= contentH + 0.01
-      if (row.cells && !row.cantSplit && !keepWhole && onRowSplit) {
+      const keepWhole =
+        row.height <= contentH + 0.01 &&
+        (row.cantSplit === true || (row.isHeader && ri < leadHeaderRows))
+      if (row.cells && !keepWhole && onRowSplit) {
         let firstFragment = true
         const turn = (placed: number, y: number) => {
           // the notes ride the first fragment (the references sit in the row head)
@@ -1756,7 +1758,7 @@ function _placeTable(
           continue
         }
       }
-      let cuts = !row.cantSplit && !keepWhole && row.cutYs ? [...row.cutYs] : []
+      let cuts = !keepWhole && row.cutYs ? [...row.cutYs] : []
       let segTurns = 0
       let lastTurnPrev = 0
       const placeSegments = (bounds: number[]) => {
@@ -1806,7 +1808,7 @@ function _placeTable(
       // rows keep the fill glued to the last segment: a clipped fill would desync
       // bookkeeping from DOM height, leaking shading/empty rows past the page edge.
       if (row.height > contentH + 0.01) {
-        if (!row.cantSplit && contentEnd > contentH) {
+        if (!keepWhole && contentEnd > contentH) {
           // A fixed-height row can be taller than a page while containing only one
           // text band, so DOM line sampling may provide too few natural cuts. Keep
           // every segment page-sized; natural inter-band cuts remain preferred and
@@ -1850,9 +1852,9 @@ function _placeTable(
         if (row.isHeader && ri < headerRows) placedHeader = true
         continue
       }
-      // cantSplit / empty / no cut points: the row is atomic; turn the page
-      // first if it doesn't fit. A repeated header keeps the fresh page
-      // non-empty, so the minH turn above must not double up here.
+      // A page-sized cantSplit row, an empty row or a row without cut points is
+      // atomic: turn the page first if it doesn't fit. A repeated header keeps
+      // the fresh page non-empty, so the minH turn above must not double up here.
       if (!pageEmpty() && !turnedForMinH && turnBeforeRow(ri, repeatH)) {
         ri = -1
         continue

@@ -344,8 +344,48 @@ function cancelledError(): Error {
   return error
 }
 
-function codexChildEnv(cliPath: string): NodeJS.ProcessEnv {
-  const env = { ...process.env }
+const CODEX_CHILD_ENV_KEYS = new Set([
+  'APPDATA',
+  'CODEX_HOME',
+  'COMSPEC',
+  'HOME',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'HTTPS_PROXY',
+  'HTTP_PROXY',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'LOCALAPPDATA',
+  'NODE_EXTRA_CA_CERTS',
+  'NO_PROXY',
+  'OPENAI_API_KEY',
+  'OPENAI_BASE_URL',
+  'OPENAI_ORG_ID',
+  'OPENAI_PROJECT_ID',
+  'PATH',
+  'PATHEXT',
+  'SSL_CERT_DIR',
+  'SSL_CERT_FILE',
+  'SYSTEMROOT',
+  'TEMP',
+  'TMP',
+  'USERPROFILE',
+  'WINDIR',
+  'XDG_CACHE_HOME',
+  'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
+])
+
+/** Environment intentionally exposed to Codex; unrelated parent secrets stay out. */
+export function codexChildEnv(
+  cliPath: string,
+  base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {}
+  for (const [key, value] of Object.entries(base)) {
+    if (value !== undefined && CODEX_CHILD_ENV_KEYS.has(key.toUpperCase())) env[key] = value
+  }
   // Electron on Windows can omit HOME even though USERPROFILE is present. The
   // native Codex launcher uses HOME to find its normal login/config directory.
   if (process.platform === 'win32' && !env.HOME && env.USERPROFILE) env.HOME = env.USERPROFILE
@@ -801,13 +841,12 @@ const CODEX_PERMISSION_PROFILE = 'genoffice'
 /**
  * Codex keeps its own shell tool even when told not to use it, and the plain
  * read-only sandbox still lets that tool read the whole disk. A permission
- * profile confines reads to platform paths plus our temp dir. An explicit
- * `sandbox` would disable the profile, so it is only used in the fallback.
+ * profile confines reads to platform paths plus our temp dir. Starting without
+ * proof that this profile is active is therefore never safe.
  */
 export function codexThreadStartParams(
   config: AiProviderConfig,
   tempDir: string,
-  mode: 'profile' | 'read-only',
 ): Record<string, unknown> {
   const base = {
     ...(config.model.trim() ? { model: config.model.trim() } : {}),
@@ -817,7 +856,6 @@ export function codexThreadStartParams(
     baseInstructions: CODEX_BASE_INSTRUCTIONS,
     ephemeral: true,
   }
-  if (mode === 'read-only') return { ...base, sandbox: 'read-only' }
   return {
     ...base,
     config: {
@@ -841,26 +879,21 @@ async function startNativeThread(
 ): Promise<string> {
   let profileResult: unknown
   try {
-    profileResult = await client.request(
-      'thread/start',
-      codexThreadStartParams(config, tempDir, 'profile'),
-    )
-    if (activePermissionProfileId(profileResult) === CODEX_PERMISSION_PROFILE) {
-      return threadIdFrom(profileResult)
-    }
-  } catch {
-    // Older Codex builds reject the profile keys; fall through to the sandbox.
-    profileResult = undefined
+    profileResult = await client.request('thread/start', codexThreadStartParams(config, tempDir))
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`Codex permission profile could not be enforced: ${detail}`)
+  }
+  if (activePermissionProfileId(profileResult) === CODEX_PERMISSION_PROFILE) {
+    return threadIdFrom(profileResult)
   }
   // A user config.toml sandbox_mode or an older Codex ignored the profile. Discard
-  // that thread before falling back so it does not linger under looser permissions.
+  // that thread so it does not linger under looser permissions, then fail closed.
   const abandoned = optionalThreadId(profileResult)
   if (abandoned) {
     await client.request('thread/delete', { threadId: abandoned }).catch(() => undefined)
   }
-  return threadIdFrom(
-    await client.request('thread/start', codexThreadStartParams(config, tempDir, 'read-only')),
-  )
+  throw new Error('Codex permission profile was not activated; refusing to start the thread')
 }
 
 export interface CodexTurnTransport {

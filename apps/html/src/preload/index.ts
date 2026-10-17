@@ -47,7 +47,19 @@ const api: HtmlApi = {
   saveImage: (data) => ipcRenderer.invoke(HTML_CHANNELS.saveImage, data),
   readImage: (src) => ipcRenderer.invoke(HTML_CHANNELS.readImage, src),
   pickAttachments: () => ipcRenderer.invoke(HTML_CHANNELS.filesPick),
-  addAttachmentPaths: (paths) => ipcRenderer.invoke(HTML_CHANNELS.filesAdd, paths),
+  addAttachmentFiles: (files) => {
+    const paths = Array.isArray(files)
+      ? files.flatMap((file) => {
+          try {
+            const path = webUtils.getPathForFile(file)
+            return path ? [path] : []
+          } catch {
+            return []
+          }
+        })
+      : []
+    return ipcRenderer.invoke(HTML_CHANNELS.filesAdd, paths)
+  },
   addPastedImage: (data, ext) => ipcRenderer.invoke(HTML_CHANNELS.filesAddPastedImage, data, ext),
   readAttachment: (path, offset, maxChars) =>
     ipcRenderer.invoke(HTML_CHANNELS.filesRead, path, offset, maxChars),

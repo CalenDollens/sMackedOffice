@@ -9,6 +9,7 @@ import {
   buildCodexAppServerPrompt,
   codexAppServerLaunchArgs,
   codexAppServerOutputSchema,
+  codexChildEnv,
   codexThreadStartParams,
   parseCodexAppServerTurn,
   resolveCodexCliPath,
@@ -105,7 +106,7 @@ describe('Codex app-server bridge', () => {
 
   it('confines Codex tool reads to the temp dir through a permission profile', () => {
     const config = { apiKey: '', model: 'gpt-5.6-terra' }
-    const params = codexThreadStartParams(config, '/tmp/genoffice-codex-x', 'profile')
+    const params = codexThreadStartParams(config, '/tmp/genoffice-codex-x')
     expect(params).not.toHaveProperty('sandbox')
     expect(params.approvalPolicy).toBe('never')
     expect(params.config).toEqual({
@@ -116,13 +117,24 @@ describe('Codex app-server bridge', () => {
         },
       },
     })
-    expect(codexThreadStartParams(config, '/tmp/genoffice-codex-x', 'read-only')).toMatchObject({
-      sandbox: 'read-only',
-    })
     expect(activePermissionProfileId({ activePermissionProfile: { id: 'genoffice' } })).toBe(
       'genoffice',
     )
     expect(activePermissionProfileId({ activePermissionProfile: null })).toBeUndefined()
+  })
+
+  it('passes only required settings and Codex credentials to the child', () => {
+    const env = codexChildEnv('/opt/codex/bin/codex', {
+      PATH: '/usr/bin',
+      HOME: '/home/me',
+      OPENAI_API_KEY: 'codex-key',
+      AWS_SECRET_ACCESS_KEY: 'do-not-forward',
+      NODE_OPTIONS: '--require /tmp/evil.js',
+    })
+    expect(env.OPENAI_API_KEY).toBe('codex-key')
+    expect(env.PATH).toContain('/opt/codex/bin')
+    expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined()
+    expect(env.NODE_OPTIONS).toBeUndefined()
   })
 
   it('builds a strict one-turn output schema with only known tool names', () => {

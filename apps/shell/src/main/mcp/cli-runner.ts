@@ -80,6 +80,48 @@ function parseJson(stdout: string): CliJsonOk | CliJsonError | undefined {
 /** Child output budget: past this the buffers are truncated and the child killed. */
 export const MAX_CLI_OUTPUT_BYTES = 64 * 1024 * 1024
 
+const CHILD_ENV_KEYS = new Set([
+  'APPDATA',
+  'COMSPEC',
+  'GENOFFICE_ALLOWED_ROOTS',
+  'GENOFFICE_AUDIT_LOG',
+  'GENOFFICE_MCP_COMPACT_SCHEMAS',
+  'GENOFFICE_PDFIUM_WASM',
+  'HOME',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'LOCALAPPDATA',
+  'NODE_EXTRA_CA_CERTS',
+  'PATH',
+  'PATHEXT',
+  'SSL_CERT_DIR',
+  'SSL_CERT_FILE',
+  'SYSTEMROOT',
+  'TEMP',
+  'TMP',
+  'USERPROFILE',
+  'WINDIR',
+  'XDG_CACHE_HOME',
+  'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
+  'XLSX_SIDECAR_PATH',
+])
+
+/** Minimum environment needed by the bundled CLI; ambient credentials and code-injection knobs stay out. */
+export function cliChildEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {}
+  for (const source of [process.env, extra]) {
+    for (const [key, value] of Object.entries(source)) {
+      if (value !== undefined && CHILD_ENV_KEYS.has(key.toUpperCase())) env[key] = value
+    }
+  }
+  env.ELECTRON_RUN_AS_NODE = '1'
+  return env
+}
+
 export function createCliRunner(paths: CliRunnerPaths): CliRunner {
   return {
     run(args, options = {}) {
@@ -90,7 +132,7 @@ export function createCliRunner(paths: CliRunnerPaths): CliRunner {
         : 120_000
       return new Promise<CliRunOutcome>((resolve) => {
         const child = spawn(paths.executable, [paths.entry, ...args, '--json'], {
-          env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ...paths.env },
+          env: cliChildEnv(paths.env),
           windowsHide: true,
         })
         let stdout = ''

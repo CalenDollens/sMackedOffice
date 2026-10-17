@@ -333,6 +333,7 @@ export function insertTableAt(editor: Editor, rows: number, cols: number): void 
   const line = { style: 'single', szEighths: 4, color: 'auto' }
   const table = {
     rows: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ paras: [''] }))),
+    rowCantSplit: Array.from({ length: rows }, () => true),
     colWidthsPct: Array.from({ length: cols }, () => 100 / cols),
     widthPct: 100,
     autoFit: 'window' as const,

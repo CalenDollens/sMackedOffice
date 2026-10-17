@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   cliErrorMessage,
+  cliChildEnv,
   createCliRunner,
   MAX_CLI_OUTPUT_BYTES,
 } from '../../src/main/mcp/cli-runner'
@@ -16,6 +17,18 @@ function script(body: string): string {
 }
 
 describe('createCliRunner output cap', () => {
+  it('does not inherit unrelated secrets or Node code-injection options', () => {
+    const env = cliChildEnv({
+      GENOFFICE_ALLOWED_ROOTS: 'C:\\safe',
+      AWS_SECRET_ACCESS_KEY: 'do-not-forward',
+      NODE_OPTIONS: '--require C:\\evil.js',
+    })
+    expect(env.GENOFFICE_ALLOWED_ROOTS).toBe('C:\\safe')
+    expect(env.ELECTRON_RUN_AS_NODE).toBe('1')
+    expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined()
+    expect(env.NODE_OPTIONS).toBeUndefined()
+  })
+
   it('kills a flooding child and bounds the buffered output', async () => {
     const runner = createCliRunner({
       executable: process.execPath,

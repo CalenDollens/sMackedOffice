@@ -27,6 +27,7 @@ describe('a table is never the last body block (issue #266)', () => {
     const editor = await openBlank()
     insertTableAt(editor, 2, 2)
     expect(topLevel(editor)).toEqual(['docTable', 'docParagraph'])
+    expect(editor.state.doc.firstChild?.firstChild?.attrs.cantSplit).toBe(true)
     expect(cellDepth(editor)).toBeGreaterThan(0)
     expect(editor.state.selection.from).toBe(4)
   })
@@ -101,5 +102,6 @@ describe('a table is never the last body block (issue #266)', () => {
       'docNestedTable',
       'docParagraph',
     ])
+    expect(cell.child(1).attrs.model.rowCantSplit).toEqual([true])
   })
 })

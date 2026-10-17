@@ -42,7 +42,7 @@ export const mcpCommand: CommandDef = {
       name: 'token',
       value: 'secret',
       description:
-        'with --http, require this bearer token on every request (default: $GENOFFICE_MCP_TOKEN, else none)',
+        'with --http, require this bearer token on every request (required for non-loopback --host; default: $GENOFFICE_MCP_TOKEN)',
     },
     {
       name: 'compact-schemas',
@@ -154,14 +154,23 @@ async function serve(args: Parameters<CommandDef['run']>[0], ctx: CommandContext
       { reason: 'invalid_argument' },
     )
   }
-  const { serveHttp } = await import('../mcp/http')
+  const token = tokenFlag ?? (ctx.env.GENOFFICE_MCP_TOKEN?.trim() || undefined)
+  const { isLoopbackHost, serveHttp } = await import('../mcp/http')
+  if (!token && !isLoopbackHost(hostFlag ?? '127.0.0.1')) {
+    throw new CliError(
+      EXIT.usage,
+      'a non-loopback --host requires --token or GENOFFICE_MCP_TOKEN',
+      undefined,
+      { reason: 'invalid_argument' },
+    )
+  }
   await serveHttp({
     cwd: ctx.cwd,
     env: ctx.env,
     log: ctx.log,
     port,
     host: hostFlag,
-    token: tokenFlag ?? (ctx.env.GENOFFICE_MCP_TOKEN?.trim() || undefined),
+    token,
     compactSchemas,
   })
   return { summary: 'mcp server stopped' }

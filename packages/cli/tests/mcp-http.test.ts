@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { createServer, type Server } from 'node:http'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -243,11 +242,11 @@ describe('remote defaults', () => {
       for (const name of ['render', 'slides_render']) {
         const args: Record<string, unknown> = { file: 'x.pptx' }
         defaultOut(tools.get(name)!, args, ctx)
-        expect(String(args.out)).toMatch(new RegExp(`^${ctx.scratchDir}/render-`))
+        expect(String(args.out).startsWith(join(ctx.scratchDir, 'render-'))).toBe(true)
       }
       const created: Record<string, unknown> = { from: 'notes.md' }
       defaultOut(tools.get('create_pdf')!, created, ctx)
-      expect(String(created.out)).toMatch(/\/notes\.pdf$/)
+      expect(basename(String(created.out))).toBe('notes.pdf')
       const kept: Record<string, unknown> = { file: 'a.docx', out: 'b.docx' }
       defaultOut(tools.get('docs_apply')!, kept, ctx)
       expect(kept.out).toBe('b.docx')
@@ -281,36 +280,22 @@ describe('file store and fetch guard', () => {
     store.dispose()
   })
 
-  it('downloads by IP and by host name, keeping the remote name, and refuses link-local hosts', async () => {
-    const server: Server = createServer((req, res) => {
-      if (req.url === '/redirect') {
-        res.writeHead(302, { location: '/dir/data.csv' })
-        res.end()
-        return
-      }
-      res.writeHead(200, { 'content-type': 'text/csv' })
-      res.end('a,b\n1,2\n')
-    })
-    await new Promise<void>((r) => server.listen(0, r))
-    const port = (server.address() as { port: number }).port
-    try {
-      const dir = tempDir()
-      const path = await fetchToFile(`http://127.0.0.1:${port}/redirect`, dir)
-      expect(path.endsWith('/data.csv')).toBe(true)
-      expect(readFileSync(path, 'utf8')).toBe('a,b\n1,2\n')
-      const byName = await fetchToFile(`http://localhost:${port}/dir/data.csv`, dir)
-      expect(readFileSync(byName, 'utf8')).toBe('a,b\n1,2\n')
-      for (const host of ['169.254.169.254', '[::ffff:a9fe:a9fe]', '[fd00:ec2:0:0:0:0:0:254]']) {
-        await expect(fetchToFile(`http://${host}/latest/meta-data`, dir)).rejects.toThrow(
-          'refusing to fetch',
-        )
-      }
-      await expect(fetchToFile(`ftp://127.0.0.1/x`, dir)).rejects.toThrow('only http(s)')
-      await expect(
-        fetchToFile(`http://127.0.0.1:${port}/big.csv`, dir, { maxBytes: 4 }),
-      ).rejects.toThrow('exceeds')
-    } finally {
-      server.close()
+  it('refuses non-public targets and non-http schemes before connecting', async () => {
+    const dir = tempDir()
+    for (const host of [
+      '127.0.0.1',
+      'localhost',
+      '10.0.0.1',
+      '192.168.1.1',
+      '169.254.169.254',
+      '[::1]',
+      '[::ffff:a9fe:a9fe]',
+      '[fd00:ec2:0:0:0:0:0:254]',
+    ]) {
+      await expect(fetchToFile(`http://${host}/latest/meta-data`, dir)).rejects.toThrow(
+        'refusing to fetch',
+      )
     }
+    await expect(fetchToFile('ftp://127.0.0.1/x', dir)).rejects.toThrow('only http(s)')
   })
 })

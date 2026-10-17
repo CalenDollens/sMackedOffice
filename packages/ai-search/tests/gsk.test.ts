@@ -16,6 +16,13 @@ import {
 } from '../src/gsk'
 import { ResponseTooLargeError } from '@genoffice/electron-utils/remote-image'
 
+// Artifact-download tests use the same global fetch queue as the two tool_cli
+// requests. The SSRF transport itself is covered in electron-utils tests.
+vi.mock('@genoffice/electron-utils/safe-remote-url', () => ({
+  fetchWithSsrfGuard: (url: string, options?: { signal?: AbortSignal }) =>
+    fetch(url, options?.signal ? { signal: options.signal } : undefined),
+}))
+
 describe('parseGskOutput', () => {
   it('parses clean JSON', () => {
     expect(parseGskOutput('{"status":"ok"}')).toEqual({ status: 'ok' })
@@ -100,8 +107,15 @@ describe('gskChildEnv', () => {
   afterEach(() => setGskProxyUrl(''))
 
   it('sets ELECTRON_RUN_AS_NODE and no proxy vars when no proxy is known', () => {
-    const env = gskChildEnv({ PATH: '/bin' })
+    const env = gskChildEnv({
+      PATH: '/bin',
+      AWS_SECRET_ACCESS_KEY: 'do-not-forward',
+      NODE_OPTIONS: '--require /tmp/evil.js',
+    })
     expect(env.ELECTRON_RUN_AS_NODE).toBe('1')
+    expect(env.PATH).toBe('/bin')
+    expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined()
+    expect(env.NODE_OPTIONS).toBeUndefined()
     expect(env.NODE_USE_ENV_PROXY).toBeUndefined()
     expect(env.HTTPS_PROXY).toBeUndefined()
   })

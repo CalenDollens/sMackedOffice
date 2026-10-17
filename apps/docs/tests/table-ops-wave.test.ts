@@ -8,7 +8,9 @@ import { buildDocx } from '../../../packages/docx-engine/tests/helpers/build-doc
 import { editorExtensions } from '../src/renderer/editor/extensions'
 import {
   blocksToPmDoc,
+  pmTableToModel,
   pmDocToSavePlan,
+  tableModelToPmNode,
   type PmNode as JsonNode,
 } from '../src/renderer/editor/convert'
 import {
@@ -476,6 +478,15 @@ describe('cell alignment and text direction', () => {
 })
 
 describe('row properties', () => {
+  it('keeps new rows together by default without changing imported Word defaults', async () => {
+    const fresh = tableModelToPmNode({ rows: [[{ paras: [''] }]] })
+    expect(fresh.content?.[0].attrs?.cantSplit).toBe(true)
+    expect(pmTableToModel(fresh).rowCantSplit).toEqual([true])
+
+    const { editor } = await open(tableXml(1, 1))
+    expect(tableAt(editor).node.firstChild?.attrs.cantSplit).toBe(false)
+  })
+
   it('publishes cantSplit toggles on the tr so live pagination picks them up over cached samples', async () => {
     const { editor } = await open(tableXml(2, 1))
     caretIn(editor, 0, 0)

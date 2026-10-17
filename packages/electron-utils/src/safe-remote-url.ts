@@ -5,7 +5,10 @@
 /// public host bounce the request to loopback or a cloud metadata endpoint.
 
 import { lookup } from 'node:dns/promises'
+import { request as httpRequest, type IncomingMessage } from 'node:http'
+import { request as httpsRequest } from 'node:https'
 import { BlockList, isIP } from 'node:net'
+import { Readable } from 'node:stream'
 
 /**
  * Non-public address ranges. BlockList does the range math and maps
@@ -22,14 +25,20 @@ const blockedAddresses = (() => {
   list.addSubnet('169.254.0.0', 16) // link-local (cloud metadata)
   list.addSubnet('172.16.0.0', 12) // private
   list.addSubnet('192.0.0.0', 24) // IETF protocol assignments
+  list.addSubnet('192.0.2.0', 24) // documentation
+  list.addSubnet('192.88.99.0', 24) // deprecated 6to4 relay
   list.addSubnet('192.168.0.0', 16) // private
   list.addSubnet('198.18.0.0', 15) // benchmarking
+  list.addSubnet('198.51.100.0', 24) // documentation
+  list.addSubnet('203.0.113.0', 24) // documentation
   list.addSubnet('224.0.0.0', 4) // multicast
   list.addSubnet('240.0.0.0', 4) // reserved + broadcast
   list.addAddress('::', 'ipv6') // unspecified
   list.addAddress('::1', 'ipv6') // loopback
   list.addSubnet('::', 96, 'ipv6') // deprecated IPv4-compatible (::127.0.0.1)
   list.addSubnet('64:ff9b::', 96, 'ipv6') // NAT64
+  list.addSubnet('100::', 64, 'ipv6') // discard-only
+  list.addSubnet('2001:db8::', 32, 'ipv6') // documentation
   list.addSubnet('fc00::', 7, 'ipv6') // unique local
   list.addSubnet('fe80::', 10, 'ipv6') // link-local
   list.addSubnet('ff00::', 8, 'ipv6') // multicast
@@ -46,6 +55,51 @@ export function isBlockedAddress(ip: string): boolean {
   return blockedAddresses.check(ip, family === 4 ? 'ipv4' : 'ipv6')
 }
 
+interface PinnedAddress {
+  address: string
+  family: 4 | 6
+}
+
+interface SafeTarget {
+  url: URL
+  addresses: PinnedAddress[]
+}
+
+async function resolveSafeTarget(raw: unknown): Promise<SafeTarget | null> {
+  if (typeof raw !== 'string') return null
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+  const host = url.hostname
+    .replace(/^\[|\]$/g, '')
+    .toLowerCase()
+    .replace(/\.+$/, '')
+  if (!host) return null
+  if (host === 'localhost' || BLOCKED_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix))) {
+    return null
+  }
+  try {
+    const literal = isIP(host)
+    const found = literal
+      ? [{ address: host, family: literal }]
+      : await lookup(host, { all: true, verbatim: true })
+    if (found.length === 0 || found.some((entry) => isBlockedAddress(entry.address))) return null
+    return {
+      url,
+      addresses: found.map((entry) => ({
+        address: entry.address,
+        family: entry.family === 6 ? 6 : 4,
+      })),
+    }
+  } catch {
+    return null
+  }
+}
+
 /**
  * True when the URL is http(s) and its host is public. Literal addresses are
  * checked directly; hostnames are resolved and every returned address must pass,
@@ -56,39 +110,70 @@ export function isBlockedAddress(ip: string): boolean {
  * `fetchWithSsrfGuard` rather than relying on a single up-front check.
  */
 export async function isSafeRemoteUrl(raw: unknown): Promise<boolean> {
-  if (typeof raw !== 'string') return false
-  let url: URL
-  try {
-    url = new URL(raw)
-  } catch {
-    return false
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
-  // URL keeps IPv6 literals bracketed; isIP does not accept the brackets.
-  // Strip a trailing dot: DNS treats "localhost." as "localhost", so the
-  // hostname gate must too (otherwise the check passes and only the later
-  // DNS lookup catches it, after a needless external resolution).
-  const host = url.hostname
-    .replace(/^\[|\]$/g, '')
-    .toLowerCase()
-    .replace(/\.+$/, '')
-  if (host === '') return false
-  if (isIP(host)) return !isBlockedAddress(host)
-  if (host === 'localhost' || BLOCKED_HOST_SUFFIXES.some((s) => host.endsWith(s))) return false
-  try {
-    const addrs = await lookup(host, { all: true })
-    return addrs.length > 0 && addrs.every((a) => !isBlockedAddress(a.address))
-  } catch {
-    return false
-  }
+  return (await resolveSafeTarget(raw)) !== null
 }
 
 export interface FetchWithSsrfGuardOptions {
   /** Redirect hops to follow. Each hop is revalidated. Defaults to 5. */
   maxRedirects?: number
   headers?: Record<string, string>
+  signal?: AbortSignal
   /** Injectable for tests; defaults to global fetch. */
   fetchImpl?: typeof fetch
+}
+
+type LookupCallback = (error: null, address: string | PinnedAddress[], family?: number) => void
+
+function pinnedLookup(addresses: PinnedAddress[]) {
+  return (_host: string, options: { all?: boolean }, callback: LookupCallback): void => {
+    if (options.all) callback(null, addresses)
+    else callback(null, addresses[0]!.address, addresses[0]!.family)
+  }
+}
+
+function responseHeaders(response: IncomingMessage): Headers {
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(response.headers)) {
+    if (Array.isArray(value)) for (const item of value) headers.append(name, item)
+    else if (value !== undefined) headers.set(name, value)
+  }
+  return headers
+}
+
+/** Connect to the exact public addresses that were checked, closing the DNS-rebinding gap. */
+function pinnedFetch(
+  target: SafeTarget,
+  headers: Record<string, string> | undefined,
+  signal: AbortSignal | undefined,
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const request = target.url.protocol === 'https:' ? httpsRequest : httpRequest
+    const req = request(
+      target.url,
+      {
+        method: 'GET',
+        ...(headers ? { headers } : {}),
+        ...(signal ? { signal } : {}),
+        lookup: pinnedLookup(target.addresses) as never,
+      },
+      (response) => {
+        const status = response.statusCode ?? 500
+        const noBody = status === 204 || status === 205 || status === 304
+        const body = noBody
+          ? null
+          : (Readable.toWeb(response) as ReadableStream<Uint8Array<ArrayBuffer>>)
+        resolve(
+          new Response(body, {
+            status,
+            statusText: response.statusMessage,
+            headers: responseHeaders(response),
+          }),
+        )
+      },
+    )
+    req.once('error', reject)
+    req.end()
+  })
 }
 
 /**
@@ -100,7 +185,7 @@ export async function fetchWithSsrfGuard(
   rawUrl: string,
   options: FetchWithSsrfGuardOptions = {},
 ): Promise<Response | null> {
-  const { maxRedirects = 5, headers, fetchImpl = fetch } = options
+  const { maxRedirects = 5, headers, signal, fetchImpl } = options
   // maxRedirects arrives from callers (CLI flags, IPC-adjacent config): an
   // Infinity value would follow redirects forever, so normalize to 0..10.
   const hopBudget = Number.isFinite(maxRedirects)
@@ -108,14 +193,20 @@ export async function fetchWithSsrfGuard(
     : 5
   let current = rawUrl
   for (let hop = 0; hop <= hopBudget; hop++) {
-    if (!(await isSafeRemoteUrl(current))) return null
-    // headers stays absent rather than explicitly undefined (exactOptionalPropertyTypes)
-    const resp = await fetchImpl(current, {
-      ...(headers ? { headers } : {}),
-      redirect: 'manual',
-    })
+    const target = await resolveSafeTarget(current)
+    if (!target) return null
+    // Custom fetch is a test seam. Production sockets are pinned to the DNS
+    // answers validated above so a second lookup cannot rebind to an internal IP.
+    const resp = fetchImpl
+      ? await fetchImpl(current, {
+          ...(headers ? { headers } : {}),
+          ...(signal ? { signal } : {}),
+          redirect: 'manual',
+        })
+      : await pinnedFetch(target, headers, signal)
     if (resp.status < 300 || resp.status >= 400) return resp
     const location = resp.headers.get('location')
+    await resp.body?.cancel().catch(() => undefined)
     if (!location) return null
     try {
       current = new URL(location, current).toString()

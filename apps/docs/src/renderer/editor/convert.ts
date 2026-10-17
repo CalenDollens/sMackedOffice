@@ -1023,7 +1023,9 @@ export function tableModelToPmNode(
         heightRule: model.rowHeightRules?.[rowIndex] ?? null,
         repeatHeader: model.repeatHeaderRows?.[rowIndex] ?? false,
         repeatHeaderEdited: false,
-        cantSplit: model.rowCantSplit?.[rowIndex] ?? false,
+        // Preserve Word's allow-break default for imported rows, but keep rows
+        // together by default in tables created inside the editor.
+        cantSplit: model.rowCantSplit?.[rowIndex] ?? docxIndex === null,
         cantSplitEdited: false,
         rawTrPr: model.rawTrPrs?.[rowIndex] ?? null,
         rowRevision: model.rowRevisions?.[rowIndex] ?? null,

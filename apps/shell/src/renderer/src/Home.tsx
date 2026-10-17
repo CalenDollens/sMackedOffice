@@ -2184,11 +2184,9 @@ export function Home() {
       if (!event.dataTransfer.types.includes('Files')) return
       event.preventDefault()
       setPanelDrop(false)
-      const paths = Array.from(event.dataTransfer.files)
-        .map((file) => window.aiOffice.pathForFile(file))
-        .filter(Boolean)
-      if (paths.length === 0) return
-      void window.aiOffice.dropFolderRoots(paths).then((added) => {
+      const files = Array.from(event.dataTransfer.files)
+      if (files.length === 0) return
+      void window.aiOffice.dropFolderRoots(files).then((added) => {
         if (added.length > 0) loadRoot()
       })
     },

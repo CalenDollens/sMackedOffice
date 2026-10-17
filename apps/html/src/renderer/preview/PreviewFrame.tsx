@@ -59,7 +59,7 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, Props>(function Previ
         title={t('viewPreview')}
         src={src}
         onLoad={onLoad}
-        sandbox="allow-scripts allow-forms allow-popups allow-modals"
+        sandbox="allow-scripts"
         referrerPolicy="no-referrer"
       />
       {draft != null && <DraftPreview html={draft} />}

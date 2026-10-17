@@ -382,24 +382,22 @@ export function AiPanel({
     e.preventDefault()
     e.stopPropagation()
     setDragOver(false)
-    const paths = Array.from(e.dataTransfer.files)
-      .map((f) => window.htmlApi.getPathForFile(f))
-      .filter(Boolean)
-    if (paths.length > 0) mergeAttachments(await window.htmlApi.addAttachmentPaths(paths))
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) mergeAttachments(await window.htmlApi.addAttachmentFiles(files))
   }
   /** pasted files with a local path go through the regular route; pure bitmaps (screenshots) hit a temp file first */
   const onPasteFiles = async (files: File[]) => {
-    const paths: string[] = []
+    const localFiles: File[] = []
     for (const f of files) {
       const path = window.htmlApi.getPathForFile(f)
       if (path) {
-        paths.push(path)
+        localFiles.push(f)
         continue
       }
       const ext = PASTE_MIME_EXT[f.type] ?? f.name.split('.').pop()?.toLowerCase() ?? 'bin'
       mergeAttachments(await window.htmlApi.addPastedImage(await f.arrayBuffer(), ext))
     }
-    if (paths.length > 0) mergeAttachments(await window.htmlApi.addAttachmentPaths(paths))
+    if (localFiles.length > 0) mergeAttachments(await window.htmlApi.addAttachmentFiles(localFiles))
   }
   /** a pasted base64 image (data: URL or a bare base64 dump) becomes a real attachment, not chat text */
   const onPasteText = (text: string): boolean => {

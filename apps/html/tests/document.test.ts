@@ -155,49 +155,78 @@ describe('parse map', () => {
 
 describe('preview document', () => {
   it('injects after a quoted greater-than in head and ignores tags in raw text', async () => {
-    const { buildPreviewDocument } = await import('../src/main/preview-document')
+    const { buildPreviewDocument, HTML_PREVIEW_CSP } = await import('../src/main/preview-document')
     const base = 'html-asset://local/docs/'
+    const guard = `<meta http-equiv="Content-Security-Policy" content="${HTML_PREVIEW_CSP}">`
     expect(
       buildPreviewDocument('<html><head data-x=">"><title>x</title></head></html>', base),
-    ).toBe(`<html><head data-x=">"><base href="${base}"><title>x</title></head></html>`)
+    ).toBe(`<html><head data-x=">">${guard}<base href="${base}"><title>x</title></head></html>`)
     expect(
       buildPreviewDocument("<html><head data-x='>'><title>x</title></head></html>", base),
-    ).toBe(`<html><head data-x='>'><base href="${base}"><title>x</title></head></html>`)
+    ).toBe(`<html><head data-x='>'>${guard}<base href="${base}"><title>x</title></head></html>`)
     expect(
       buildPreviewDocument(
         '<html><head><script>const tag = "<base href=\\"https://x/\\>";</script><title>x</title></head></html>',
         base,
       ),
     ).toContain(
-      `<head><base href="${base}"><script>const tag = "<base href=\\"https://x/\\>";</script>`,
+      `<head>${guard}<base href="${base}"><script>const tag = "<base href=\\"https://x/\\>";</script>`,
     )
   })
 
   it('ignores inert template head and base content', async () => {
-    const { buildPreviewDocument } = await import('../src/main/preview-document')
+    const { buildPreviewDocument, HTML_PREVIEW_CSP } = await import('../src/main/preview-document')
     const base = 'html-asset://local/docs/'
+    const guard = `<meta http-equiv="Content-Security-Policy" content="${HTML_PREVIEW_CSP}">`
     const inert =
       '<template data-x=">"><head data-kind=">"><base href="https://inert/"></head></template>'
     const document = `${inert}<html><head data-x=">"><title>x</title></head></html>`
     expect(buildPreviewDocument(document, base)).toBe(
-      `${inert}<html><head data-x=">"><base href="${base}"><title>x</title></head></html>`,
+      `${inert}<html><head data-x=">">${guard}<base href="${base}"><title>x</title></head></html>`,
     )
     expect(buildPreviewDocument(`${inert}<p>frag</p>`, base)).toBe(
-      `<base href="${base}">${inert}<p>frag</p>`,
+      `${guard}<base href="${base}">${inert}<p>frag</p>`,
     )
   })
 
   it('injects a base tag into head only when the author has none', async () => {
-    const { buildPreviewDocument, assetBaseHref } = await import('../src/main/preview-document')
+    const { buildPreviewDocument, assetBaseHref, HTML_PREVIEW_CSP } =
+      await import('../src/main/preview-document')
     const base = assetBaseHref('/Users/h/My Docs')
+    const guard = `<meta http-equiv="Content-Security-Policy" content="${HTML_PREVIEW_CSP}">`
     expect(base).toBe('html-asset://local/Users/h/My%20Docs/')
     expect(buildPreviewDocument('<html><head><title>x</title></head></html>', base)).toBe(
-      `<html><head><base href="${base}"><title>x</title></head></html>`,
+      `<html><head>${guard}<base href="${base}"><title>x</title></head></html>`,
     )
-    expect(buildPreviewDocument('<p>frag</p>', base)).toBe(`<base href="${base}"><p>frag</p>`)
+    expect(buildPreviewDocument('<p>frag</p>', base)).toBe(
+      `${guard}<base href="${base}"><p>frag</p>`,
+    )
     const authored = '<html><head><base href="https://x/"></head></html>'
-    expect(buildPreviewDocument(authored, base)).toBe(authored)
-    expect(buildPreviewDocument('<p>a</p>', null)).toBe('<p>a</p>')
+    expect(buildPreviewDocument(authored, base)).toBe(
+      `<html><head>${guard}<base href="https://x/"></head></html>`,
+    )
+    expect(buildPreviewDocument('<p>a</p>', null)).toBe(`${guard}<p>a</p>`)
     expect(assetBaseHref('C:\\Users\\h\\docs\\')).toBe('html-asset://local/C:/Users/h/docs/')
+  })
+
+  it('allows only the app-injected inspector script with a per-document nonce', async () => {
+    const { authorizeInspectorScript, buildPreviewDocument, htmlPreviewCsp } =
+      await import('../src/main/preview-document')
+    const template = "const version = '__GX_VERSION__'"
+    const instrumented = authorizeInspectorScript(
+      "<html><head><script>window.authored = true</script></head><body><script data-gx-inspector>const version = '7'</script></body></html><script data-gx-inspector>window.evil = true</script>",
+      template,
+      'test-nonce',
+    )
+    const out = buildPreviewDocument(instrumented, null, 'test-nonce')
+    expect(out).toContain(
+      `<meta http-equiv="Content-Security-Policy" content="${htmlPreviewCsp('test-nonce')}">`,
+    )
+    expect(out).toContain('<script>window.authored = true</script>')
+    expect(out).not.toContain('<script nonce="test-nonce">window.authored')
+    expect(out).toContain(
+      '<script data-gx-inspector nonce="test-nonce">const version = \'7\'</script>',
+    )
+    expect(out).toContain('<script data-gx-inspector>window.evil = true</script>')
   })
 })

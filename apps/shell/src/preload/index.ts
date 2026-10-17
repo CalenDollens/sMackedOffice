@@ -188,14 +188,21 @@ const homeApi: HomeApi = {
   async addFolderRoot() {
     return (await ipcRenderer.invoke(HOME_CHANNELS.addFolderRoot)) as FolderRoot | null
   },
-  async dropFolderRoots(paths) {
+  async dropFolderRoots(files) {
+    const paths = Array.isArray(files)
+      ? files.flatMap((file) => {
+          try {
+            const path = webUtils.getPathForFile(file)
+            return path ? [path] : []
+          } catch {
+            return []
+          }
+        })
+      : []
     return (await ipcRenderer.invoke(HOME_CHANNELS.dropFolderRoots, paths)) as FolderRoot[]
   },
   async removeFolderRoot(path) {
     await ipcRenderer.invoke(HOME_CHANNELS.removeFolderRoot, path)
-  },
-  pathForFile(file) {
-    return webUtils.getPathForFile(file)
   },
   async listFolder(dir) {
     return (await ipcRenderer.invoke(HOME_CHANNELS.listFolder, dir)) as FolderListing

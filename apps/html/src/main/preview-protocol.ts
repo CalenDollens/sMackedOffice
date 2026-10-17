@@ -1,6 +1,14 @@
+import { randomBytes } from 'node:crypto'
 import { DOCX_MEDIA_SCHEME_PRIVILEGE, RENDERER_SCHEME_PRIVILEGE } from '@genoffice/electron-utils'
 import { protocol } from 'electron'
-import { ASSET_SCHEME, PREVIEW_SCHEME, buildPreviewDocument } from './preview-document'
+import {
+  ASSET_SCHEME,
+  PREVIEW_SCHEME,
+  authorizeInspectorScript,
+  buildPreviewDocument,
+  htmlPreviewCsp,
+} from './preview-document'
+import inspectorSource from '../renderer/preview/inspector.js?raw'
 
 export { assetBaseHref, previewUrlFor } from './preview-document'
 
@@ -41,8 +49,14 @@ export function registerPreviewProtocol(
     const match = /^view-(\d+)$/.exec(host)
     const entry = match ? resolve(Number(match[1])) : null
     if (!entry) return new Response(null, { status: 404 })
-    return new Response(buildPreviewDocument(entry.text, entry.baseHref), {
-      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    const inspectorNonce = randomBytes(18).toString('base64')
+    const previewText = authorizeInspectorScript(entry.text, inspectorSource, inspectorNonce)
+    return new Response(buildPreviewDocument(previewText, entry.baseHref, inspectorNonce), {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Content-Security-Policy': htmlPreviewCsp(inspectorNonce),
+      },
     })
   })
 }

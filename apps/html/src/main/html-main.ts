@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -66,7 +67,7 @@ import {
   editableImageMime,
   extensionlessAssetMime,
 } from './asset-mime'
-import { buildPreviewDocument } from './preview-document'
+import { buildPreviewDocument, PREVIEW_SCHEME } from './preview-document'
 import { inlineImagesForSingleFile, singleFileExportBaseName } from './single-file-html'
 import {
   assetBaseHref,
@@ -696,13 +697,18 @@ const ATTACHMENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 
 /** extracted text cache keyed by path; invalidated by mtime+size */
 const attachmentTextCache = new Map<string, { stamp: string; text: string }>()
+/** Canonical attachment paths explicitly selected or dropped into each renderer. */
+const attachmentGrantsByWc = new Map<number, Set<string>>()
 
 function statAttachment(filePath: string): { meta?: AttachmentMeta; error?: string } {
-  const name = basename(filePath)
-  const ext = name.split('.').pop()?.toLowerCase() ?? ''
-  if (!ATTACHMENT_EXTS.has(ext)) return { error: `${name}: ${tm('errUnsupportedExt', { ext })}` }
   try {
-    const stat = statSync(filePath)
+    const canonicalPath = realpathSync(filePath)
+    const name = basename(canonicalPath)
+    const ext = name.split('.').pop()?.toLowerCase() ?? ''
+    if (!ATTACHMENT_EXTS.has(ext)) {
+      return { error: `${name}: ${tm('errUnsupportedExt', { ext })}` }
+    }
+    const stat = statSync(canonicalPath)
     if (!stat.isFile()) return { error: `${name}: ${tm('errNotFile')}` }
     if (stat.size > ATTACHMENT_MAX_BYTES) {
       return {
@@ -712,13 +718,14 @@ function statAttachment(filePath: string): { meta?: AttachmentMeta; error?: stri
     if (ATTACHMENT_IMAGE_EXTS.has(ext) && stat.size > ATTACHMENT_IMAGE_MAX_BYTES) {
       return { error: `${name}: ${tm('errImageTooLarge')}` }
     }
-    return { meta: { path: filePath, name, ext, sizeBytes: stat.size } }
+    return { meta: { path: canonicalPath, name, ext, sizeBytes: stat.size } }
   } catch {
+    const name = basename(filePath)
     return { error: `${name}: ${tm('errUnreadable')}` }
   }
 }
 
-function collectAttachments(paths: string[]): AttachmentAddResult {
+function collectAttachments(wcId: number, paths: string[]): AttachmentAddResult {
   const accepted: AttachmentMeta[] = []
   const rejected: string[] = []
   for (const p of paths) {
@@ -726,7 +733,22 @@ function collectAttachments(paths: string[]): AttachmentAddResult {
     if (meta) accepted.push(meta)
     else if (error) rejected.push(error)
   }
+  if (accepted.length > 0) {
+    const grants = attachmentGrantsByWc.get(wcId) ?? new Set<string>()
+    for (const meta of accepted) grants.add(meta.path)
+    attachmentGrantsByWc.set(wcId, grants)
+  }
   return { accepted, rejected }
+}
+
+function authorizedAttachmentPath(wcId: number, candidate: unknown): string | null {
+  if (typeof candidate !== 'string' || !candidate) return null
+  try {
+    const canonicalPath = realpathSync(candidate)
+    return attachmentGrantsByWc.get(wcId)?.has(canonicalPath) ? canonicalPath : null
+  } catch {
+    return null
+  }
 }
 
 let pastedImageSeq = 0
@@ -1459,19 +1481,22 @@ function registerHtmlIpc(): void {
       properties: ['openFile', 'multiSelections'],
     })
     if (picked.canceled || picked.filePaths.length === 0) return null
-    return collectAttachments(picked.filePaths)
+    return collectAttachments(e.sender.id, picked.filePaths)
   })
 
-  ipcMain.handle(HTML_CHANNELS.filesAdd, (_e, paths: unknown) =>
-    collectAttachments(Array.isArray(paths) ? paths.filter((p) => typeof p === 'string') : []),
+  ipcMain.handle(HTML_CHANNELS.filesAdd, (e, paths: unknown) =>
+    collectAttachments(
+      e.sender.id,
+      Array.isArray(paths) ? paths.filter((p) => typeof p === 'string') : [],
+    ),
   )
 
   ipcMain.handle(
     HTML_CHANNELS.filesAddPastedImage,
-    (_e, data: unknown, ext: unknown): AttachmentAddResult => {
+    (e, data: unknown, ext: unknown): AttachmentAddResult => {
       const filePath = savePastedImage(data, ext)
       return filePath
-        ? collectAttachments([filePath])
+        ? collectAttachments(e.sender.id, [filePath])
         : { accepted: [], rejected: [tm('errNotImage')] }
     },
   )
@@ -1479,11 +1504,13 @@ function registerHtmlIpc(): void {
   ipcMain.handle(
     HTML_CHANNELS.filesRead,
     async (
-      _e,
-      filePath: string,
+      e,
+      requestedPath: string,
       offset: number,
       maxChars: number,
     ): Promise<AttachmentReadResult> => {
+      const filePath = authorizedAttachmentPath(e.sender.id, requestedPath)
+      if (!filePath) return { ok: false, error: tm('errUnreadable') }
       const name = basename(filePath)
       const ext = name.split('.').pop()?.toLowerCase() ?? ''
       if (!ATTACHMENT_EXTS.has(ext)) return { ok: false, error: tm('errUnsupportedExt', { ext }) }
@@ -1505,21 +1532,26 @@ function registerHtmlIpc(): void {
     },
   )
 
-  ipcMain.handle(HTML_CHANNELS.filesReadImage, (_e, filePath: string): AttachmentImageResult => {
-    const name = basename(filePath)
-    const ext = name.split('.').pop()?.toLowerCase() ?? ''
-    const mime = ATTACHMENT_IMAGE_MIME[ext]
-    if (!mime) return { ok: false, error: `${name}: ${tm('errNotImage')}` }
-    try {
-      const stat = statSync(filePath)
-      if (stat.size > ATTACHMENT_IMAGE_MAX_BYTES) {
-        return { ok: false, error: `${name}: ${tm('errImageTooLarge')}` }
+  ipcMain.handle(
+    HTML_CHANNELS.filesReadImage,
+    (e, requestedPath: string): AttachmentImageResult => {
+      const filePath = authorizedAttachmentPath(e.sender.id, requestedPath)
+      if (!filePath) return { ok: false, error: tm('errUnreadable') }
+      const name = basename(filePath)
+      const ext = name.split('.').pop()?.toLowerCase() ?? ''
+      const mime = ATTACHMENT_IMAGE_MIME[ext]
+      if (!mime) return { ok: false, error: `${name}: ${tm('errNotImage')}` }
+      try {
+        const stat = statSync(filePath)
+        if (stat.size > ATTACHMENT_IMAGE_MAX_BYTES) {
+          return { ok: false, error: `${name}: ${tm('errImageTooLarge')}` }
+        }
+        return { ok: true, base64: readFileSync(filePath).toString('base64'), mime }
+      } catch {
+        return { ok: false, error: `${name}: ${tm('errUnreadable')}` }
       }
-      return { ok: true, base64: readFileSync(filePath).toString('base64'), mime }
-    } catch {
-      return { ok: false, error: `${name}: ${tm('errUnreadable')}` }
-    }
-  })
+    },
+  )
 
   ipcMain.handle(HTML_CHANNELS.pickImage, async (e): Promise<string | null> => {
     const docPath = savePathByWc.get(e.sender.id)
@@ -1631,17 +1663,15 @@ function registerHtmlIpc(): void {
       const workDir = await mkdtemp(join(tmpdir(), 'genoffice-html-docx-'))
       let driver: ElectronBrowserDriver | null = null
       try {
-        // Same document the preview shows (scripts on, relative assets via html-asset://):
-        // html2docx extracts from the rendered DOM, not from a print.
+        // Same secured document the preview shows (authored scripts/network blocked,
+        // relative assets via html-asset://): html2docx extracts from the rendered DOM.
         const docPath = savePathByWc.get(e.sender.id)
         const base = docPath ? assetBaseHref(dirname(docPath)) : null
         const htmlPath = join(workDir, 'export.html')
         await writeFile(htmlPath, buildPreviewDocument(request.html, base), 'utf8')
         driver = await ElectronBrowserDriver.create(HTML2DOCX_VIEWPORT)
-        // AI-generated markup with a script that never yields keeps
-        // executeJavaScript pending forever, which would strand the hidden
-        // window and this handler; race a watchdog and destroy the window on
-        // timeout (same shape as the slides export guard).
+        // A stalled conversion can keep executeJavaScript pending forever and
+        // strand the hidden window; race a watchdog and destroy it on timeout.
         const conversion = convertHtmlToDocx({ url: pathToFileURL(htmlPath).href }, driver).then(
           ({ docx }) => docx,
         )
@@ -1797,6 +1827,7 @@ function grantAndTrack(wc: WebContents, openPath?: string | null): void {
     closePresentViewsOf(wcId)
     openPathByWc.delete(wcId)
     allowedByWc.delete(wcId)
+    attachmentGrantsByWc.delete(wcId)
     savePathByWc.delete(wcId)
     dirtyByWc.delete(wcId)
     previewTextByWc.delete(wcId)
@@ -1808,6 +1839,9 @@ function grantAndTrack(wc: WebContents, openPath?: string | null): void {
 }
 
 function installExternalLinkOpener(wc: WebContents): void {
+  wc.on('will-frame-navigate', (event) => {
+    if (!event.isMainFrame && !event.url.startsWith(`${PREVIEW_SCHEME}://`)) event.preventDefault()
+  })
   wc.setWindowOpenHandler(({ url }) => {
     const target = safeExternalUrl(url, { allowedProtocols: ['http:', 'https:', 'mailto:'] })
     if (target) void shell.openExternal(target)

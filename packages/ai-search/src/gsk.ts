@@ -28,6 +28,7 @@ import {
 import { genofficeApiKey, genofficeAuthPath, reloadGenofficeAuth } from './genoffice-auth'
 // deep import: the package root re-exports Electron-bound modules, and this file also runs in the genoffice CLI
 import { readBodyCapped } from '@genoffice/electron-utils/remote-image'
+import { fetchWithSsrfGuard } from '@genoffice/electron-utils/safe-remote-url'
 
 const SEARCH_TIMEOUT_MS = 60_000
 const GENERATE_TIMEOUT_MS = 600_000
@@ -142,8 +143,37 @@ export { setGskProxyUrl, gskProxyUrl } from './shared'
  * NODE_USE_ENV_PROXY=1 (Node >= 24 — Electron 41 ships Node 24). Only
  * http(s):// proxies are forwarded; undici's env proxy cannot speak SOCKS.
  */
+const GSK_CHILD_ENV_KEYS = new Set([
+  'APPDATA',
+  'COMSPEC',
+  'HOME',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'LOCALAPPDATA',
+  'NODE_EXTRA_CA_CERTS',
+  'NO_PROXY',
+  'PATH',
+  'PATHEXT',
+  'SSL_CERT_DIR',
+  'SSL_CERT_FILE',
+  'SYSTEMROOT',
+  'TEMP',
+  'TMP',
+  'USERPROFILE',
+  'WINDIR',
+  'XDG_CACHE_HOME',
+  'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
+])
+
 export function gskChildEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...base, ELECTRON_RUN_AS_NODE: '1' }
+  const env: NodeJS.ProcessEnv = { ELECTRON_RUN_AS_NODE: '1' }
+  for (const [key, value] of Object.entries(base)) {
+    if (value !== undefined && GSK_CHILD_ENV_KEYS.has(key.toUpperCase())) env[key] = value
+  }
   const proxy = [
     gskProxyUrl(),
     base.HTTPS_PROXY,
@@ -582,7 +612,8 @@ export async function gskSlideGenerate(
   )
   const downloadUrl = dl.download_url
   if (!downloadUrl) throw new Error('file/download returned no download_url')
-  const resp = await fetch(String(downloadUrl), signal ? { signal } : undefined)
+  const resp = await fetchWithSsrfGuard(String(downloadUrl), signal ? { signal } : undefined)
+  if (!resp) throw new Error('PPTX download URL was blocked by the network safety policy')
   if (!resp.ok) throw new Error(`PPTX download failed: HTTP ${resp.status}`)
   return {
     bytes: await readBodyCapped(resp, MAX_SLIDE_ARTIFACT_BYTES),

@@ -63,7 +63,6 @@ import {
   windowMenuTemplate,
   aboutMenuItem,
   checkUpdatesMenuItem,
-  setUpdateCheckInvoker,
   installRendererProtocol,
 } from '@genoffice/electron-utils'
 import {
@@ -75,18 +74,10 @@ import {
 import { OPEN_DOCUMENTS_FILE, clearOpenDocuments, publishOpenDocuments } from './open-documents'
 import { startControlServer, type ControlServer } from './control-server'
 import { controlHandler } from './control-handlers'
-import { installCliLinkBestEffort } from './cli-link'
 import { createDefaultAppService, execFileRunner } from './default-app'
 import { registerIntegrationsIpc } from './integrations-ipc'
-import {
-  ANALYTICS_ENABLED_KEY,
-  analyticsEnabledFrom,
-  createAnalytics,
-  ensureAnalyticsClientState,
-  extractPackagedAnalyticsKeys,
-  markAnalyticsFirstLaunchSent,
-} from './analytics'
-import type { Analytics, AnalyticsKeys } from './analytics'
+import { ANALYTICS_ENABLED_KEY, analyticsEnabledFrom } from './analytics'
+import type { Analytics } from './analytics'
 import {
   LAST_RUN_VERSION_KEY,
   STAR_PROMPT_KEY,
@@ -352,7 +343,6 @@ import {
   setDockHost,
   takeTornTab,
 } from './detached-windows'
-import { applyUpdateChannel, checkForUpdatesNow, initAutoUpdater } from './updater'
 import { isUpdateChannel, type UpdateChannel } from '../shared/update-api'
 
 /**
@@ -569,31 +559,16 @@ function currentAiPanelPrefs(): AiPanelPrefs {
   return cachedAiPanelPrefs
 }
 
-// ---- anonymous usage analytics (see src/main/analytics.ts) ----
-// Stays a no-op until initAnalytics() runs at startup; keyless builds
-// (source/forks) keep the no-op forever, so every track() call is safe.
+// ---- analytics permanently disabled in this fork ----
+// Tracking call sites remain inert through this immutable no-op implementation.
 
-let analytics: Analytics = { active: false, track: () => {} }
+const analytics: Analytics = { active: false, track: () => {} }
 
 let cachedAnalyticsEnabled: boolean | null = null
 
 function analyticsEnabled(): boolean {
   cachedAnalyticsEnabled ??= analyticsEnabledFrom(readAppSettings(APP_SETTINGS_PATH()))
   return cachedAnalyticsEnabled
-}
-
-function resolveAnalyticsKeys(): AnalyticsKeys | null {
-  // Only packaged extraMetadata is authoritative. Source/dev runs never read
-  // runtime credentials and therefore remain a strict no-op.
-  if (!app.isPackaged) return null
-  try {
-    return extractPackagedAnalyticsKeys(
-      JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')),
-      app.isPackaged,
-    )
-  } catch {
-    return null
-  }
 }
 
 function persistAnalyticsPreference(enabled: boolean): boolean {
@@ -607,32 +582,6 @@ function persistAnalyticsPreference(enabled: boolean): boolean {
   } catch (error) {
     cachedAnalyticsEnabled = previous
     throw error
-  }
-}
-
-function initAnalytics(): void {
-  try {
-    let clientState: ReturnType<typeof ensureAnalyticsClientState> | null = null
-    const getClientState = () => (clientState ??= ensureAnalyticsClientState(APP_SETTINGS_PATH()))
-    analytics = createAnalytics({
-      keys: resolveAnalyticsKeys(),
-      getClientId: () => getClientState().clientId,
-      isEnabled: analyticsEnabled,
-      shouldTrackFirstLaunch: () => getClientState().firstLaunchPending,
-      onFirstLaunchSent: () => markAnalyticsFirstLaunchSent(APP_SETTINGS_PATH()),
-      // Country-only approximation from OS regional settings. This avoids an
-      // IP lookup while populating GA4's built-in Country dimension.
-      getCountryCode: () => app.getLocaleCountryCode(),
-      // evaluated per event: ui_lang follows live language switches
-      baseParams: () => ({
-        app_version: app.getVersion(),
-        platform: process.platform,
-        os_version: process.getSystemVersion(),
-        ui_lang: currentLang(),
-      }),
-    })
-  } catch {
-    // analytics must never block startup
   }
 }
 
@@ -3040,7 +2989,7 @@ function createShellWindow(): void {
     height: 900,
     minWidth: 720,
     minHeight: 550,
-    title: 'GenOffice',
+    title: 'sMackedOffice',
     // vibrancy: editor modules punch translucent regions (e.g. the slides
     // thumbnail pane) through to the desktop
     ...(process.platform === 'darwin'
@@ -4061,7 +4010,6 @@ function registerHomeIpc(): void {
     if (!isUpdateChannel(channel) || channel === currentUpdateChannel()) return
     cachedUpdateChannel = channel
     writeAppSetting(APP_SETTINGS_PATH(), 'updateChannel', channel)
-    applyUpdateChannel(channel)
   })
 
   ipcMain.handle(
@@ -5760,9 +5708,6 @@ app.whenReady().then(async () => {
   } catch {
     // settings write failures must never block startup
   }
-  // off the startup path: a symlink / registry write nobody is waiting for
-  setTimeout(() => installCliLinkBestEffort(APP_SETTINGS_PATH()), 3000)
-  initAnalytics()
   analytics.track('app_launch')
   startSheetsCaptureServer()
   // Register the docs renderer bridge listeners before the MCP server can take
@@ -5861,8 +5806,6 @@ app.whenReady().then(async () => {
   // deferred to ready: labels need currentLang(), which reads app.getLocale()
   installBackToHomeItems()
   installDockMenu()
-  setUpdateCheckInvoker(() => void checkForUpdatesNow())
-  initAutoUpdater(() => shellWindow, currentUpdateChannel())
   // resource watchdog: a renderer that stays hot for minutes gets diagnostics
   // recorded and the user an offer to close the document (headless exports
   // are short-lived and unattended)

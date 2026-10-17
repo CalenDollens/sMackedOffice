@@ -50,12 +50,23 @@ const MAX_JSON_BYTES = 32 * 1024 * 1024
  * the process died. Over the cap the oldest session is closed first (FIFO).
  */
 const MAX_SESSIONS = 100
-const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
+export function isLoopbackHost(value: string): boolean {
+  const host = value
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.+$/, '')
+  if (host === 'localhost' || host === '::1') return true
+  return /^127(?:\.\d{1,3}){3}$/.test(host)
+}
 
 export async function startHttp(opts: HttpServeOptions): Promise<HttpHandle> {
   // an empty-string host would bypass the loopback fallback and bind every
   // interface; the command layer rejects it, this keeps any other caller safe
   const host = opts.host?.trim() || '127.0.0.1'
+  if (!opts.token && !isLoopbackHost(host)) {
+    throw new Error('MCP HTTP requires a bearer token when binding to a non-loopback host')
+  }
   const files = new FileStore(
     join(tmpdir(), `genoffice-mcp-http-${process.pid}-${randomBytes(4).toString('hex')}`),
   )
@@ -252,9 +263,9 @@ export async function startHttp(opts: HttpServeOptions): Promise<HttpHandle> {
       return
     }
     // no token and a loopback bind: refuse Host headers a rebound DNS name would carry
-    if (!opts.token && LOOPBACK_HOSTS.has(host)) {
+    if (!opts.token && isLoopbackHost(host)) {
       const hostname = hostnameOf(header(req.headers.host) ?? '')
-      if (!LOOPBACK_HOSTS.has(hostname)) {
+      if (!isLoopbackHost(hostname)) {
         json(res, 403, { error: 'host not allowed' })
         return
       }
@@ -329,11 +340,6 @@ export async function startHttp(opts: HttpServeOptions): Promise<HttpHandle> {
       resolve()
     })
   })
-  if (!opts.token && !LOOPBACK_HOSTS.has(host)) {
-    log(
-      '[mcp] warning: reachable from other machines without --token; anyone on the network can use the tools',
-    )
-  }
   log(`[mcp] listening on ${handle.url}/mcp (uploads: PUT ${handle.url}/files/<name>)`)
   return handle
 }

@@ -153,10 +153,32 @@ export function isHttpUrl(value: unknown): value is string {
   return typeof value === 'string' && /^https?:\/\//i.test(value)
 }
 
-/** Cloud instance-metadata endpoints: the one address range a server fetching on a client's behalf must never reach. BlockList canonicalises, so IPv4-mapped and expanded IPv6 spellings match too. */
+/** Non-public address ranges a server fetching on a client's behalf must never reach. */
 const BLOCKED = new BlockList()
+BLOCKED.addSubnet('0.0.0.0', 8, 'ipv4')
+BLOCKED.addSubnet('10.0.0.0', 8, 'ipv4')
+BLOCKED.addSubnet('100.64.0.0', 10, 'ipv4')
+BLOCKED.addSubnet('127.0.0.0', 8, 'ipv4')
 BLOCKED.addSubnet('169.254.0.0', 16, 'ipv4')
+BLOCKED.addSubnet('172.16.0.0', 12, 'ipv4')
+BLOCKED.addSubnet('192.0.0.0', 24, 'ipv4')
+BLOCKED.addSubnet('192.0.2.0', 24, 'ipv4')
+BLOCKED.addSubnet('192.88.99.0', 24, 'ipv4')
+BLOCKED.addSubnet('192.168.0.0', 16, 'ipv4')
+BLOCKED.addSubnet('198.18.0.0', 15, 'ipv4')
+BLOCKED.addSubnet('198.51.100.0', 24, 'ipv4')
+BLOCKED.addSubnet('203.0.113.0', 24, 'ipv4')
+BLOCKED.addSubnet('224.0.0.0', 4, 'ipv4')
+BLOCKED.addSubnet('240.0.0.0', 4, 'ipv4')
+BLOCKED.addAddress('::', 'ipv6')
+BLOCKED.addAddress('::1', 'ipv6')
+BLOCKED.addSubnet('::', 96, 'ipv6')
+BLOCKED.addSubnet('64:ff9b::', 96, 'ipv6')
+BLOCKED.addSubnet('100::', 64, 'ipv6')
+BLOCKED.addSubnet('2001:db8::', 32, 'ipv6')
+BLOCKED.addSubnet('fc00::', 7, 'ipv6')
 BLOCKED.addSubnet('fe80::', 10, 'ipv6')
+BLOCKED.addSubnet('ff00::', 8, 'ipv6')
 BLOCKED.addAddress('fd00:ec2::254', 'ipv6')
 
 interface Pinned {
@@ -169,8 +191,18 @@ async function pinnedAddresses(url: URL): Promise<Pinned[]> {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error(`only http(s) URLs can be fetched: ${url.href}`)
   }
-  const host = url.hostname.replace(/^\[|\]$/g, '')
-  if (host === 'metadata.google.internal') throw new Error(`refusing to fetch ${url.href}`)
+  const host = url.hostname
+    .replace(/^\[|\]$/g, '')
+    .toLowerCase()
+    .replace(/\.+$/, '')
+  if (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal')
+  ) {
+    throw new Error(`refusing to fetch ${url.href}`)
+  }
   const literal = isIP(host)
   const found = literal
     ? [{ address: host, family: literal }]

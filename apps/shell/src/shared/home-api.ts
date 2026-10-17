@@ -208,12 +208,10 @@ export interface HomeApi {
   folderRoots(): Promise<FolderRoot[]>
   /** directory picker; the chosen folder joins the tree in place (nothing is copied or moved) */
   addFolderRoot(): Promise<FolderRoot | null>
-  /** OS paths dropped on the Folders panel: folders join the tree, documents open */
-  dropFolderRoots(paths: string[]): Promise<FolderRoot[]>
+  /** OS files dropped on the Folders panel: folders join the tree, documents open */
+  dropFolderRoots(files: File[]): Promise<FolderRoot[]>
   /** take an added folder off the list; the disk is untouched */
   removeFolderRoot(path: string): Promise<void>
-  /** absolute path of a File from an OS drag (Electron webUtils) */
-  pathForFile(file: File): string
   /** one level of the tree: sub-folders + supported files directly inside `dir` */
   listFolder(dir: string): Promise<FolderListing>
   /** create `parent/name`; resolves to the new path */

@@ -1732,8 +1732,9 @@ describe('computeSectionedSlicesF2 — table row-level page breaks', () => {
     expect(slices.length).toBe(2)
   })
 
-  it('cantSplit row: whole row is pushed to the next page (no break inside the row)', () => {
-    // 3 rows: 50+50+50, page height 120, the third row does not fit
+  it('cantSplit row crossing a page guide is moved whole to the next page', () => {
+    // The dotted guide is at 120px. The third 50px row intersects it but fits
+    // an empty page, so its top (100px) becomes the next slice boundary.
     const rows: TableRowBox[] = [
       { height: 50 },
       { height: 50 },
@@ -1742,8 +1743,7 @@ describe('computeSectionedSlicesF2 — table row-level page breaks', () => {
     const b = makeTableBlock(0, rows)
     const geoms = [{ contentHeight: 120, forceBreak: false }]
     const slices = computeSectionedSlicesF2([b], geoms, 150)
-    // Row 3 is on page 2
-    expect(slices.length).toBe(2)
+    expect(slices.map((slice) => slice.start)).toEqual([0, 100])
   })
 
   it('empty table does not crash', () => {
@@ -2279,6 +2279,15 @@ describe('computeSectionedSlicesF2 — table row-level page breaks', () => {
     const b = makeTableBlock(0, rows)
     const slices = computeSectionedSlicesF2([b], [{ contentHeight: 220, forceBreak: false }], 250)
     expect(slices[1].start).toBe(50)
+  })
+
+  it('cantSplit row taller than a page still splits at safe cut points', () => {
+    const rows: TableRowBox[] = [
+      { height: 300, cutYs: [100, 200], contentBottom: 300, cantSplit: true },
+    ]
+    const b = makeTableBlock(0, rows)
+    const slices = computeSectionedSlicesF2([b], [{ contentHeight: 120, forceBreak: false }], 300)
+    expect(slices.map((slice) => slice.start)).toEqual([0, 100, 200])
   })
 
   it('atLeast trHeight overflowing the remainder pushes the whole row (Word probe 2026-08-23)', () => {

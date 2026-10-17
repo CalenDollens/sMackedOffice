@@ -10,14 +10,20 @@ describe('isBlockedAddress', () => {
     '192.168.1.1',
     '0.0.0.0',
     '100.64.0.1',
+    '192.0.2.1',
+    '198.51.100.1',
+    '203.0.113.1',
     '255.255.255.255',
   ])('blocks non-public IPv4 %s', (ip) => {
     expect(isBlockedAddress(ip)).toBe(true)
   })
 
-  it.each(['::1', '::', 'fe80::1', 'fd00::1', 'ff02::1'])('blocks non-public IPv6 %s', (ip) => {
-    expect(isBlockedAddress(ip)).toBe(true)
-  })
+  it.each(['::1', '::', 'fe80::1', 'fd00::1', 'ff02::1', '100::1', '2001:db8::1'])(
+    'blocks non-public IPv6 %s',
+    (ip) => {
+      expect(isBlockedAddress(ip)).toBe(true)
+    },
+  )
 
   // URL normalizes [::ffff:127.0.0.1] to ::ffff:7f00:1, so the hex form must be
   // classified through the IPv4 rules rather than read as a plain IPv6 address

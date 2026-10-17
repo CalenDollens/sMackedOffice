@@ -3389,8 +3389,8 @@ export const DocTableRow = Node.create({
       heightRule: { default: null as 'atLeast' | 'exact' | null },
       repeatHeader: { default: false },
       repeatHeaderEdited: { default: false },
-      /** w:cantSplit (the row may not break across pages) */
-      cantSplit: { default: false },
+      /** w:cantSplit (the row may not break across pages); new rows default to keeping together */
+      cantSplit: { default: true },
       cantSplitEdited: { default: false },
       rawTrPr: { default: null as string | null },
       /** trPr w:ins/w:del row-level revision ({kind, author, ...} | null) */

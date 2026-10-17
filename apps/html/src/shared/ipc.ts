@@ -248,8 +248,8 @@ export interface HtmlApi {
   readImage(src: string): Promise<ImageData | null>
   /** file picker for chat attachments (multi-select) */
   pickAttachments(): Promise<AttachmentAddResult | null>
-  /** validate dropped paths and return attachment metadata */
-  addAttachmentPaths(paths: string[]): Promise<AttachmentAddResult>
+  /** validate OS-backed dropped files and return attachment metadata */
+  addAttachmentFiles(files: File[]): Promise<AttachmentAddResult>
   /** persist a pasted clipboard image (no local path) to a temp file and add it as an attachment */
   addPastedImage(data: ArrayBuffer, ext: string): Promise<AttachmentAddResult>
   /** read a slice of the extracted text of an attachment */

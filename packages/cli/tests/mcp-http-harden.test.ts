@@ -1,8 +1,7 @@
 import { readdirSync, rmSync, type Dirent } from 'node:fs'
-import { createServer, type Server } from 'node:http'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { defaultRegistry } from '../src/cli'
 import { fetchToFile } from '../src/mcp/files'
@@ -75,6 +74,31 @@ describe('mcp http hardening', () => {
     }
   })
 
+  it('requires a bearer token before binding a non-loopback host', async () => {
+    await expect(
+      startHttp({
+        cwd: process.cwd(),
+        env: {},
+        log: () => {},
+        port: 0,
+        host: '0.0.0.0',
+      }),
+    ).rejects.toThrow(/requires a bearer token/)
+  })
+
+  it('rejects an unauthenticated non-loopback host at the command boundary', async () => {
+    const { mcpCommand } = await import('../src/commands/mcp')
+    const { parseArgs } = await import('../src/args')
+    await expect(
+      mcpCommand.run(parseArgs(['--http', '0', '--host', '0.0.0.0']), {
+        cwd: process.cwd(),
+        env: {},
+        log: () => {},
+        warn: () => {},
+      }),
+    ).rejects.toThrow(/requires --token/)
+  })
+
   it('ignores poisoned forwarded host/proto by default', async () => {
     const res = await fetch(`${handle.url}/files/report.txt`, {
       method: 'PUT',
@@ -137,46 +161,11 @@ describe('mcp http hardening', () => {
     expect(body.name.length).toBeGreaterThan(0)
   })
 
-  it('falls back instead of throwing for a %ZZ remote name', async () => {
-    const server: Server = createServer((req, res) => {
-      if (req.url === '/redirect-bad-name') {
-        res.writeHead(200, {
-          'content-type': 'text/plain',
-          'content-disposition': `attachment; filename*=UTF-8''%ZZ`,
-        })
-        res.end('hello')
-        return
-      }
-      res.writeHead(200, { 'content-type': 'text/plain' })
-      res.end('hello')
-    })
-    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
-    const port = (server.address() as { port: number }).port
-    try {
-      const dir = tempDir()
-      const fromHeader = await fetchToFile(`http://127.0.0.1:${port}/redirect-bad-name`, dir)
-      // '_ZZ' has no extension, so the text/plain content type contributes '.txt'
-      expect(basename(fromHeader)).toBe('_ZZ.txt')
-      const fromPath = await fetchToFile(`http://127.0.0.1:${port}/%ZZ`, dir)
-      expect(basename(fromPath)).toBe('_ZZ.txt')
-    } finally {
-      server.close()
-    }
-  })
-
-  it('keeps redirects http(s)-only', async () => {
-    const server: Server = createServer((req, res) => {
-      res.writeHead(302, { location: 'ftp://127.0.0.1/evil.bin' })
-      res.end()
-    })
-    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
-    const port = (server.address() as { port: number }).port
-    try {
-      await expect(fetchToFile(`http://127.0.0.1:${port}/start`, tempDir())).rejects.toThrow(
-        'only http(s)',
+  it('refuses loopback and private fetch targets', async () => {
+    for (const host of ['127.0.0.1', 'localhost', '10.0.0.1', '192.168.1.1', '[::1]']) {
+      await expect(fetchToFile(`http://${host}/private`, tempDir())).rejects.toThrow(
+        'refusing to fetch',
       )
-    } finally {
-      server.close()
     }
   })
 
